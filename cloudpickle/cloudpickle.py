@@ -1033,6 +1033,37 @@ def _module_reduce(obj):
         return dynamic_subimport, (obj.__name__, state)
 
 
+def _classmethod_function(cls, name):
+    return cls.__dict__[name].__func__
+
+
+def _classmethod_function_reduce(func):
+    """Reference an exact classmethod's function through its defining class."""
+    qualname = func.__qualname__
+    if "." not in qualname or "<locals>" in qualname:
+        return None
+    owner_name, name = qualname.rsplit(".", 1)
+    module = sys.modules.get(func.__module__)
+    if module is None or func.__module__ == "__main__":
+        return None
+    try:
+        owner = _getattribute(module, owner_name)
+    except AttributeError:
+        return None
+    if (
+        type(owner) is not type
+        or owner.__module__ != func.__module__
+        or owner.__qualname__ != owner_name
+        or func.__globals__ is not vars(module)
+        or not _should_pickle_by_reference(owner)
+    ):
+        return None
+    descriptor = owner.__dict__.get(name)
+    if type(descriptor) is classmethod and descriptor.__func__ is func:
+        return _classmethod_function, (owner, name)
+    return None
+
+
 def _method_reduce(obj):
     return (types.MethodType, (obj.__func__, obj.__self__))
 
@@ -1287,6 +1318,9 @@ class Pickler(pickle.Pickler):
         if _should_pickle_by_reference(obj):
             return NotImplemented
         else:
+            reduction = _classmethod_function_reduce(obj)
+            if reduction is not None:
+                return reduction
             return self._dynamic_function_reduce(obj)
 
     def _function_getnewargs(self, func):
@@ -1486,6 +1520,9 @@ class Pickler(pickle.Pickler):
             """
             if _should_pickle_by_reference(obj, name=name):
                 return super().save_global(obj, name=name)
+            reduction = _classmethod_function_reduce(obj)
+            if reduction is not None:
+                return self.save_reduce(*reduction, obj=obj)
             elif PYPY and isinstance(obj.__code__, builtin_code_type):
                 return self.save_pypy_builtin_func(obj)
             else:
