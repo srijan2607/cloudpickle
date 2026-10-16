@@ -1,6 +1,13 @@
 In development
 ==============
 
+- Reference the underlying functions of exact, source-qualified classmethods
+  through their ordinary importable defining class, avoiding traversal of
+  unpicklable globals while preserving shared method/function identity.
+  Local functions, custom metaclasses/descriptors and by-value registrations
+  retain their existing function reduction.
+  ([issue #387](https://github.com/cloudpipe/cloudpickle/issues/387))
+
 - Make pickling of functions depending on globals in notebook more
   deterministic. ([PR#560](https://github.com/cloudpipe/cloudpickle/pull/560))
 
